@@ -1,0 +1,9 @@
+{
+  "id": "carbonvoice",
+  "channels": ["carbonvoice"],
+  "configSchema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {}
+  }
+}

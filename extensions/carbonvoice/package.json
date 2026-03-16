@@ -1,0 +1,13 @@
+{
+  "name": "@openclaw/carbonvoice",
+  "version": "2026.3.16",
+  "private": true,
+  "description": "OpenClaw Carbon Voice channel plugin",
+  "type": "module",
+  "openclaw": {
+    "extensions": [
+      "./index.ts"
+    ],
+    "setupEntry": "./setup-entry.ts"
+  }
+}
