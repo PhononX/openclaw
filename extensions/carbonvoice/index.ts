@@ -1,7 +1,7 @@
 import type { ChannelPlugin, OpenClawPluginApi } from "openclaw/plugin-sdk/core";
 import { emptyPluginConfigSchema } from "openclaw/plugin-sdk/core";
-import { carbonVoicePlugin } from "./src/channel.js";
 import { setCarbonVoiceRuntime } from "./runtime.js";
+import { carbonVoicePlugin } from "./src/channel.js";
 
 const plugin = {
   id: "carbonvoice",
@@ -10,9 +10,8 @@ const plugin = {
   configSchema: emptyPluginConfigSchema(),
   register(api: OpenClawPluginApi) {
     setCarbonVoiceRuntime(api.runtime);
-    api.registerChannel({ plugin: carbonVoicePlugin as ChannelPlugin });
+    api.registerChannel({ plugin: carbonVoicePlugin as unknown as ChannelPlugin });
   },
 };
 
 export default plugin;
-

@@ -124,6 +124,7 @@ bundledChannelRuntimeSetters.setLineRuntime({
 
 export const pluginContractRegistry: PluginContractEntry[] = [
   { id: "bluebubbles", plugin: requireBundledChannelPlugin("bluebubbles") },
+  { id: "carbonvoice", plugin: requireBundledChannelPlugin("carbonvoice") },
   { id: "discord", plugin: requireBundledChannelPlugin("discord") },
   { id: "feishu", plugin: requireBundledChannelPlugin("feishu") },
   { id: "googlechat", plugin: requireBundledChannelPlugin("googlechat") },
@@ -494,6 +495,11 @@ export const surfaceContractRegistry: SurfaceContractEntry[] = [
     id: "bluebubbles",
     plugin: requireBundledChannelPlugin("bluebubbles"),
     surfaces: ["actions", "setup", "status", "outbound", "messaging", "threading", "gateway"],
+  },
+  {
+    id: "carbonvoice",
+    plugin: requireBundledChannelPlugin("carbonvoice"),
+    surfaces: ["outbound", "gateway"],
   },
   {
     id: "discord",

@@ -1,4 +1,7 @@
 import { bluebubblesPlugin } from "../../../extensions/bluebubbles/src/channel.js";
+import { setCarbonVoiceRuntime } from "../../../extensions/carbonvoice/runtime.js";
+import { carbonVoicePlugin } from "../../../extensions/carbonvoice/src/channel.js";
+import { carbonVoiceSetupPlugin } from "../../../extensions/carbonvoice/src/channel.setup.js";
 import { discordPlugin } from "../../../extensions/discord/src/channel.js";
 import { discordSetupPlugin } from "../../../extensions/discord/src/channel.setup.js";
 import { setDiscordRuntime } from "../../../extensions/discord/src/runtime.js";
@@ -32,6 +35,7 @@ import type { ChannelId, ChannelPlugin } from "./types.js";
 
 export const bundledChannelPlugins = [
   bluebubblesPlugin,
+  carbonVoicePlugin,
   discordPlugin,
   feishuPlugin,
   googlechatPlugin,
@@ -54,6 +58,7 @@ export const bundledChannelPlugins = [
 ] as ChannelPlugin[];
 
 export const bundledChannelSetupPlugins = [
+  carbonVoiceSetupPlugin,
   telegramSetupPlugin,
   whatsappSetupPlugin,
   discordSetupPlugin,
@@ -82,6 +87,7 @@ export function requireBundledChannelPlugin(id: ChannelId): ChannelPlugin {
 }
 
 export const bundledChannelRuntimeSetters = {
+  setCarbonVoiceRuntime,
   setDiscordRuntime,
   setLineRuntime,
   setTelegramRuntime,

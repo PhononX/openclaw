@@ -4,6 +4,9 @@
   "private": true,
   "description": "OpenClaw Carbon Voice channel plugin",
   "type": "module",
+  "dependencies": {
+    "socket.io-client": "^4.8.3"
+  },
   "openclaw": {
     "extensions": [
       "./index.ts"

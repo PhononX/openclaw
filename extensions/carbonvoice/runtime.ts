@@ -5,4 +5,3 @@ const { setRuntime: setCarbonVoiceRuntime, getRuntime: getCarbonVoiceRuntime } =
   createPluginRuntimeStore<PluginRuntime>("Carbon Voice runtime not initialized");
 
 export { getCarbonVoiceRuntime, setCarbonVoiceRuntime };
-

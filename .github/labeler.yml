@@ -3,6 +3,11 @@
       - any-glob-to-any-file:
           - "extensions/bluebubbles/**"
           - "docs/channels/bluebubbles.md"
+"channel: carbonvoice":
+  - changed-files:
+      - any-glob-to-any-file:
+          - "extensions/carbonvoice/**"
+          - "docs/channels/carbonvoice.md"
 "channel: discord":
   - changed-files:
       - any-glob-to-any-file:
