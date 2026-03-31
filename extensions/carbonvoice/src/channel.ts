@@ -1,13 +1,16 @@
 import { randomUUID } from "node:crypto";
-import { resolveInboundRouteEnvelopeBuilderWithRuntime } from "openclaw/plugin-sdk";
+import {
+  registerPluginHttpRoute,
+  resolveInboundRouteEnvelopeBuilderWithRuntime,
+} from "openclaw/plugin-sdk";
 import type {
   ChannelGatewayContext,
   ChannelOutboundContext,
 } from "../../../src/channels/plugins/types.adapters.js";
 import { getCarbonVoiceRuntime } from "../runtime.js";
 import {
-  carbonVoiceGetMessageById,
   carbonVoiceStartMessage,
+  carbonVoiceSubscribeToMessages,
   carbonVoiceWhoAmI,
   resolveCarbonVoiceWhoAmIUserId,
 } from "./api-client.js";
@@ -16,13 +19,18 @@ import {
   carbonVoiceMeta,
   carbonVoiceSetupWizard,
   deleteCarbonVoiceAccount,
+  joinCarbonVoicePublicWebhookUrl,
   listCarbonVoiceAccountIds,
   resolveCarbonVoiceAccount,
   resolveDefaultCarbonVoiceAccountId,
   setCarbonVoiceAccountEnabled,
   CARBONVOICE_CHANNEL_ID,
 } from "./shared.js";
-import { startCarbonVoiceMessageStream } from "./stream-client.js";
+import { buildCarbonVoiceSubscribePayload } from "./subscribe.js";
+import { createCarbonVoiceWebhookHandler } from "./webhook-handler.js";
+// import { startCarbonVoiceMessageStream } from "./stream-client.js";
+
+const activeRouteUnregisters = new Map<string, () => void>();
 
 function waitUntilAbort(signal?: AbortSignal, onAbort?: () => void): Promise<void> {
   return new Promise((resolve) => {
@@ -69,8 +77,11 @@ export const carbonVoicePlugin = {
       name: account.name,
       enabled: account.enabled,
       configured: account.configured,
+      clientId: account.clientId ?? "[missing]",
       allowedUserId: account.creatorId ?? "[missing]",
       baseUrl: account.baseUrl ?? "[missing]",
+      publicWebhookBaseUrl: account.publicWebhookBaseUrl ?? "[missing]",
+      webhookPath: account.webhookPath ?? "[missing]",
       credentialSource: account.apiKey ? "apiKey" : "missing",
     }),
   },
@@ -79,6 +90,9 @@ export const carbonVoicePlugin = {
     sendText: async ({ cfg, to, text, accountId, replyToId }: ChannelOutboundContext) => {
       const resolvedAccountId = accountId?.trim() || resolveDefaultCarbonVoiceAccountId(cfg);
       const account = resolveCarbonVoiceAccount({ cfg, accountId: resolvedAccountId });
+      if (!account.clientId) {
+        throw new Error("Carbon Voice: missing clientId");
+      }
       if (!account.apiKey) {
         throw new Error(
           "Carbon Voice: missing apiKey (configure channels.carbonvoice or CARBONVOICE_API_KEY)",
@@ -125,7 +139,13 @@ export const carbonVoicePlugin = {
         );
         return waitUntilAbort(abortSignal);
       }
-      if (!account.apiKey || !account.baseUrl) {
+      if (
+        !account.clientId ||
+        !account.apiKey ||
+        !account.baseUrl ||
+        !account.publicWebhookBaseUrl ||
+        !account.webhookPath
+      ) {
         log?.warn?.(`Carbon Voice account ${accountId} missing required fields`);
         return waitUntilAbort(abortSignal);
       }
@@ -142,97 +162,85 @@ export const carbonVoicePlugin = {
       });
       const selfId = resolveCarbonVoiceWhoAmIUserId(who);
       if (!selfId) {
-        log?.error?.("Carbon Voice: /whoami did not return a user id; cannot start websocket");
+        log?.error?.("Carbon Voice: /whoami did not return a user id; cannot subscribe safely");
         return waitUntilAbort(abortSignal);
       }
+      const webhookUrl = joinCarbonVoicePublicWebhookUrl(
+        account.publicWebhookBaseUrl,
+        account.webhookPath,
+      );
+
+      const subscribeBody = buildCarbonVoiceSubscribePayload({
+        webhookUrl,
+        selfUserId: selfId,
+        restrictInboundToCreatorId: account.creatorId,
+      });
+
+      try {
+        const subscribePath = `/apps/${encodeURIComponent(account.clientId)}/subscribe`;
+        log?.info?.(
+          `Carbon Voice: subscribe request account=${accountId} baseUrl=${account.baseUrl} path=${subscribePath} body=${JSON.stringify(subscribeBody)}`,
+        );
+        await carbonVoiceSubscribeToMessages({
+          apiKey: account.apiKey,
+          clientId: account.clientId,
+          baseUrl: account.baseUrl,
+          payload: subscribeBody,
+        });
+        log?.info?.(`Carbon Voice: subscribed webhook ${webhookUrl} (account ${accountId})`);
+      } catch (err) {
+        log?.error?.(`Carbon Voice: subscribe failed: ${String(err)}`);
+        return waitUntilAbort(abortSignal);
+      }
+
+      // Websocket path kept for quick rollback while webhook path is primary.
+      // const stream = startCarbonVoiceMessageStream({
+      //   baseUrl: account.baseUrl,
+      //   apiKey: account.apiKey,
+      //   log,
+      //   onMessageCreated: async (_messageId: string) => {},
+      // });
+
       const recentIds = new Set<string>();
-      const stream = startCarbonVoiceMessageStream({
-        baseUrl: account.baseUrl,
-        apiKey: account.apiKey,
+      const handler = createCarbonVoiceWebhookHandler({
+        account,
+        recentMessageIds: recentIds,
         log,
-        onMessageCreated: async (messageId: string) => {
-          if (recentIds.has(messageId)) {
-            return;
-          }
-          recentIds.add(messageId);
-          if (recentIds.size > 10_000) {
-            recentIds.clear();
-          }
-
-          let details;
-          try {
-            details = await carbonVoiceGetMessageById({
-              apiKey: account.apiKey!,
-              baseUrl: account.baseUrl,
-              messageId,
-            });
-          } catch (err) {
-            log?.warn?.(`Carbon Voice: message fetch failed for ${messageId}: ${String(err)}`);
-            return;
-          }
-
-          const message = details?.message;
-          const creatorGuid =
-            typeof message?.creator_guid === "string" ? message.creator_guid.trim() : "";
-          const channelGuid = Array.isArray(message?.channel_guids)
-            ? message.channel_guids.find((v) => typeof v === "string" && v.trim())?.trim()
-            : undefined;
-          const body =
-            (typeof message?.transcript_txt === "string" ? message.transcript_txt : undefined) ??
-            (typeof message?.ai_summary_txt === "string" ? message.ai_summary_txt : undefined) ??
-            "";
-          if (!creatorGuid || !channelGuid || !body.trim()) {
-            return;
-          }
-          if (creatorGuid === selfId) {
-            return;
-          }
-          if (account.creatorId && creatorGuid !== account.creatorId) {
-            return;
-          }
-
-          const messageGuid =
-            (typeof message?.message_guid === "string" ? message.message_guid.trim() : "") ||
-            messageId;
-          const replyToCarbonMessageId =
-            (typeof message?.parent_message_guid === "string"
-              ? message.parent_message_guid.trim()
-              : "") || messageGuid;
-
+        deliver: async (msg) => {
           const currentCfg = await getCarbonVoiceRuntime().config.loadConfig();
           const { route, buildEnvelope } = resolveInboundRouteEnvelopeBuilderWithRuntime({
             cfg: currentCfg,
             channel: CARBONVOICE_CHANNEL_ID,
             accountId: account.accountId,
-            peer: { kind: "direct", id: channelGuid },
+            peer: { kind: "direct", id: msg.channelGuid },
             runtime: channelRuntime as never,
             sessionStore: currentCfg.session?.store,
           });
-          const { storePath, body: inboundBody } = buildEnvelope({
+          const { storePath, body } = buildEnvelope({
             channel: "Carbon Voice",
-            from: creatorGuid,
+            from: msg.creatorGuid,
             timestamp: Date.now(),
-            body,
+            body: msg.body,
           });
 
           const msgCtx = channelRuntime.reply.finalizeInboundContext({
-            Body: inboundBody,
-            RawBody: body,
-            CommandBody: body,
-            From: `${CARBONVOICE_CHANNEL_ID}:${creatorGuid}`,
-            To: `${CARBONVOICE_CHANNEL_ID}:${channelGuid}`,
+            Body: body,
+            RawBody: msg.body,
+            CommandBody: msg.body,
+            From: `${CARBONVOICE_CHANNEL_ID}:${msg.creatorGuid}`,
+            To: `${CARBONVOICE_CHANNEL_ID}:${msg.channelGuid}`,
             SessionKey: route.sessionKey,
             AccountId: account.accountId,
             OriginatingChannel: CARBONVOICE_CHANNEL_ID,
-            OriginatingTo: `${CARBONVOICE_CHANNEL_ID}:${channelGuid}`,
+            OriginatingTo: `${CARBONVOICE_CHANNEL_ID}:${msg.channelGuid}`,
             ChatType: "direct",
-            SenderName: creatorGuid,
-            SenderId: creatorGuid,
+            SenderName: msg.creatorGuid,
+            SenderId: msg.creatorGuid,
             Provider: CARBONVOICE_CHANNEL_ID,
             Surface: CARBONVOICE_CHANNEL_ID,
-            ConversationLabel: channelGuid,
-            MessageSid: messageGuid,
-            ReplyToId: messageGuid,
+            ConversationLabel: msg.channelGuid,
+            MessageSid: msg.messageGuid,
+            ReplyToId: msg.messageGuid,
             Timestamp: Date.now(),
             CommandAuthorized: true,
           });
@@ -264,23 +272,44 @@ export const carbonVoicePlugin = {
                     transcript: outText,
                     is_text_message: true,
                     is_streaming: false,
-                    channel_id: channelGuid,
-                    reply_to_message_id: replyToCarbonMessageId,
+                    channel_id: msg.channelGuid,
+                    reply_to_message_id: msg.replyToCarbonMessageId,
                   },
                 });
               },
               onReplyStart: () => {
-                log?.info?.(`Carbon Voice: agent reply started for ${channelGuid}`);
+                log?.info?.(`Carbon Voice: agent reply started for ${msg.channelGuid}`);
               },
             },
           });
         },
       });
-      log?.info?.(`Carbon Voice: websocket listener started (account ${accountId})`);
+
+      const routeKey = `${accountId}:${account.webhookPath}`;
+      const prev = activeRouteUnregisters.get(routeKey);
+      if (prev) {
+        log?.info?.(`Carbon Voice: replacing stale route ${account.webhookPath}`);
+        prev();
+        activeRouteUnregisters.delete(routeKey);
+      }
+
+      const unregister = registerPluginHttpRoute({
+        path: account.webhookPath,
+        auth: "plugin",
+        replaceExisting: true,
+        pluginId: CARBONVOICE_CHANNEL_ID,
+        accountId: account.accountId,
+        log: (m: string) => log?.info?.(m),
+        handler,
+      });
+      activeRouteUnregisters.set(routeKey, unregister);
+      log?.info?.(`Carbon Voice: registered HTTP route ${account.webhookPath}`);
 
       return waitUntilAbort(abortSignal, () => {
         log?.info?.(`Carbon Voice: stopping account ${accountId}`);
-        stream.stop();
+        unregister();
+        activeRouteUnregisters.delete(routeKey);
+        // stream.stop();
       });
     },
     stopAccount: async (

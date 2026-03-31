@@ -3,14 +3,16 @@ import type { OpenClawConfig } from "../../../src/config/config.js";
 import { CARBONVOICE_DEFAULT_BASE_URL, resolveCarbonVoiceAccount } from "./shared.js";
 
 describe("resolveCarbonVoiceAccount", () => {
-  it("requires apiKey and creatorId", () => {
+  it("requires clientId, apiKey, creatorId, and publicWebhookBaseUrl", () => {
     const cfg = {
       channels: {
         carbonvoice: {
           accounts: {
             default: {
+              clientId: "client-id",
               apiKey: "secret",
               creatorId: "user-guid",
+              publicWebhookBaseUrl: "https://gateway.example.com",
             },
           },
         },
@@ -27,7 +29,9 @@ describe("resolveCarbonVoiceAccount", () => {
         carbonvoice: {
           accounts: {
             default: {
+              clientId: "client-id",
               apiKey: "secret",
+              publicWebhookBaseUrl: "https://gateway.example.com",
             },
           },
         },
