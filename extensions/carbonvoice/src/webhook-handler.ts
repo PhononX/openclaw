@@ -1,7 +1,6 @@
 import { timingSafeEqual } from "node:crypto";
 import type { IncomingMessage, ServerResponse } from "node:http";
-import type { ChannelLogSink } from "../../../src/channels/plugins/types.core.js";
-import { readJsonBodyWithLimit } from "../../../src/infra/http-body.js";
+import { readJsonBodyWithLimit, type ChannelLogSink } from "openclaw/plugin-sdk/compat";
 import type { CarbonVoiceResolvedAccount } from "./shared.js";
 import {
   CARBONVOICE_MESSAGE_POSTED_EVENT,

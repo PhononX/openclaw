@@ -1,16 +1,57 @@
 {
   "name": "@openclaw/carbonvoice",
-  "version": "2026.3.16",
-  "private": true,
+  "version": "2026.3.14",
   "description": "OpenClaw Carbon Voice channel plugin",
   "type": "module",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/openclaw/openclaw.git",
+    "directory": "extensions/carbonvoice"
+  },
   "dependencies": {
     "socket.io-client": "^4.8.3"
   },
+  "peerDependencies": {
+    "openclaw": ">=2026.3.14"
+  },
+  "files": [
+    "index.ts",
+    "runtime.ts",
+    "setup-entry.ts",
+    "openclaw.plugin.json",
+    "src/api-client.ts",
+    "src/channel.ts",
+    "src/channel.setup.ts",
+    "src/shared.ts",
+    "src/stream-client.ts",
+    "src/subscribe.ts",
+    "src/webhook-handler.ts",
+    "src/webhook-payload.ts",
+    "README.md",
+    "CHANGELOG.md"
+  ],
   "openclaw": {
     "extensions": [
       "./index.ts"
     ],
-    "setupEntry": "./setup-entry.ts"
+    "setupEntry": "./setup-entry.ts",
+    "channel": {
+      "id": "carbonvoice",
+      "label": "Carbon Voice",
+      "selectionLabel": "Carbon Voice",
+      "docsPath": "/channels/carbonvoice",
+      "docsLabel": "carbonvoice",
+      "blurb": "Carbon Voice API webhooks and text replies (voice/TTS on the Carbon Voice side).",
+      "order": 72
+    },
+    "install": {
+      "npmSpec": "@openclaw/carbonvoice",
+      "localPath": "extensions/carbonvoice",
+      "defaultChoice": "local"
+    },
+    "releaseChecks": {
+      "rootDependencyMirrorAllowlist": ["socket.io-client"]
+    }
   }
 }
