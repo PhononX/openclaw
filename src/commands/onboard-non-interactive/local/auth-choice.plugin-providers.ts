@@ -5,14 +5,20 @@ import {
 } from "../../../agents/agent-scope.js";
 import type { ApiKeyCredential } from "../../../agents/auth-profiles/types.js";
 import { resolveDefaultAgentWorkspaceDir } from "../../../agents/workspace.js";
-import type { OpenClawConfig } from "../../../config/config.js";
+import { resolveAgentModelPrimaryValue } from "../../../config/model-input.js";
+import type { OpenClawConfig } from "../../../config/types.openclaw.js";
 import { enablePluginInConfig } from "../../../plugins/enable.js";
+import { resolvePreferredProviderForAuthChoice } from "../../../plugins/provider-auth-choice-preference.js";
+import { resolveManifestProviderAuthChoice } from "../../../plugins/provider-auth-choices.js";
 import type {
+  ProviderAuthOptionBag,
   ProviderNonInteractiveApiKeyCredentialParams,
   ProviderResolveNonInteractiveApiKeyParams,
 } from "../../../plugins/types.js";
 import type { RuntimeEnv } from "../../../runtime.js";
-import { resolvePreferredProviderForAuthChoice } from "../../auth-choice.preferred-provider.js";
+import { createLazyRuntimeSurface } from "../../../shared/lazy-runtime.js";
+import type { WizardPrompter } from "../../../wizard/prompts.js";
+import { ensureCodexRuntimePluginForModelSelection } from "../../codex-runtime-plugin-install.js";
 import type { OnboardOptions } from "../../onboard-types.js";
 
 const PROVIDER_PLUGIN_CHOICE_PREFIX = "provider-plugin:";
@@ -21,27 +27,48 @@ async function loadPluginProviderRuntime() {
   return import("./auth-choice.plugin-providers.runtime.js");
 }
 
-function buildIsolatedProviderResolutionConfig(
-  cfg: OpenClawConfig,
-  providerId: string | undefined,
-): OpenClawConfig {
-  if (!providerId) {
-    return cfg;
-  }
-  const allow = new Set(cfg.plugins?.allow ?? []);
-  allow.add(providerId);
+const loadAuthChoicePluginProvidersRuntime = createLazyRuntimeSurface(
+  loadPluginProviderRuntime,
+  ({ authChoicePluginProvidersRuntime }) => authChoicePluginProvidersRuntime,
+);
+
+function createNonInteractivePluginInstallPrompter(runtime: RuntimeEnv): WizardPrompter {
+  const unavailable = <T>(message: string): Promise<T> =>
+    Promise.reject(new Error(`Non-interactive setup cannot prompt for plugin install: ${message}`));
   return {
-    ...cfg,
-    plugins: {
-      ...cfg.plugins,
-      allow: Array.from(allow),
-      entries: {
-        ...cfg.plugins?.entries,
-        [providerId]: {
-          ...cfg.plugins?.entries?.[providerId],
-          enabled: true,
+    async intro(title) {
+      runtime.log(title);
+    },
+    async outro(message) {
+      runtime.log(message);
+    },
+    async note(message, title) {
+      runtime.log(title ? `${title}\n${message}` : message);
+    },
+    async select(params) {
+      return unavailable(params.message);
+    },
+    async multiselect(params) {
+      return unavailable(params.message);
+    },
+    async text(params) {
+      return unavailable(params.message);
+    },
+    async confirm(params) {
+      return unavailable(params.message);
+    },
+    progress(label) {
+      runtime.log(label);
+      return {
+        update(message) {
+          runtime.log(message);
         },
-      },
+        stop(message) {
+          if (message) {
+            runtime.log(message);
+          }
+        },
+      };
     },
   };
 }
@@ -74,31 +101,61 @@ export async function applyNonInteractivePluginProviderChoice(params: {
       choice: params.authChoice,
       config: params.nextConfig,
       workspaceDir,
+      includeUntrustedWorkspacePlugins: false,
     }));
-  const resolutionConfig = buildIsolatedProviderResolutionConfig(
-    params.nextConfig,
-    preferredProviderId,
-  );
   const { resolveOwningPluginIdsForProvider, resolveProviderPluginChoice, resolvePluginProviders } =
-    await loadPluginProviderRuntime();
+    await loadAuthChoicePluginProvidersRuntime();
   const owningPluginIds = preferredProviderId
     ? resolveOwningPluginIdsForProvider({
         provider: preferredProviderId,
-        config: resolutionConfig,
+        config: params.nextConfig,
         workspaceDir,
       })
     : undefined;
   const providerChoice = resolveProviderPluginChoice({
     providers: resolvePluginProviders({
-      config: resolutionConfig,
+      config: params.nextConfig,
       workspaceDir,
       onlyPluginIds: owningPluginIds,
-      bundledProviderAllowlistCompat: true,
-      bundledProviderVitestCompat: true,
+      mode: "setup",
+      includeUntrustedWorkspacePlugins: false,
     }),
     choice: params.authChoice,
   });
   if (!providerChoice) {
+    if (prefixedProviderId) {
+      params.runtime.error(
+        [
+          `Auth choice "${params.authChoice}" was not matched to a trusted provider plugin.`,
+          "If this provider comes from a workspace plugin, trust/allow it first and retry.",
+        ].join("\n"),
+      );
+      params.runtime.exit(1);
+      return null;
+    }
+    // Keep mismatch diagnostics metadata-only so untrusted workspace plugins are not loaded.
+    const trustedManifestMatch = resolveManifestProviderAuthChoice(params.authChoice, {
+      config: params.nextConfig,
+      workspaceDir,
+      includeUntrustedWorkspacePlugins: false,
+    });
+    const untrustedOnlyManifestMatch =
+      !trustedManifestMatch &&
+      resolveManifestProviderAuthChoice(params.authChoice, {
+        config: params.nextConfig,
+        workspaceDir,
+        includeUntrustedWorkspacePlugins: true,
+      });
+    if (untrustedOnlyManifestMatch) {
+      params.runtime.error(
+        [
+          `Auth choice "${params.authChoice}" matched a provider plugin that is not trusted or enabled for setup.`,
+          "If this provider comes from a workspace plugin, trust/allow it first and retry.",
+        ].join("\n"),
+      );
+      params.runtime.exit(1);
+      return null;
+    }
     return undefined;
   }
 
@@ -126,15 +183,31 @@ export async function applyNonInteractivePluginProviderChoice(params: {
     return null;
   }
 
-  return method.runNonInteractive({
+  const result = await method.runNonInteractive({
     authChoice: params.authChoice,
     config: enableResult.config,
     baseConfig: params.baseConfig,
-    opts: params.opts,
+    opts: params.opts as ProviderAuthOptionBag,
     runtime: params.runtime,
     agentDir,
     workspaceDir,
     resolveApiKey: params.resolveApiKey,
     toApiKeyCredential: params.toApiKeyCredential,
   });
+  if (!result) {
+    return result;
+  }
+  const selectedModel = resolveAgentModelPrimaryValue(result.agents?.defaults?.model);
+  if (!selectedModel) {
+    return result;
+  }
+  return (
+    await ensureCodexRuntimePluginForModelSelection({
+      cfg: result,
+      model: selectedModel,
+      prompter: createNonInteractivePluginInstallPrompter(params.runtime),
+      runtime: params.runtime,
+      workspaceDir,
+    })
+  ).cfg;
 }

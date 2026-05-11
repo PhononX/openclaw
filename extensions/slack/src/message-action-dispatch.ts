@@ -1,7 +1,16 @@
-import type { AgentToolResult } from "@mariozechner/pi-agent-core";
-import type { ChannelMessageActionContext } from "openclaw/plugin-sdk/core";
-import { parseSlackBlocksInput } from "./blocks-input.js";
-import { buildSlackInteractiveBlocks } from "./blocks-render.js";
+import type { AgentToolResult } from "@earendil-works/pi-agent-core";
+import { readBooleanParam } from "openclaw/plugin-sdk/boolean-param";
+import type { ChannelMessageActionContext } from "openclaw/plugin-sdk/channel-contract";
+import {
+  normalizeInteractiveReply,
+  normalizeMessagePresentation,
+} from "openclaw/plugin-sdk/interactive-runtime";
+import { readNumberParam, readStringParam } from "openclaw/plugin-sdk/param-readers";
+import {
+  buildSlackInteractiveBlocks,
+  buildSlackPresentationBlocks,
+  resolveSlackInteractiveBlockOffsets,
+} from "./blocks-render.js";
 
 type SlackActionInvoke = (
   action: Record<string, unknown>,
@@ -9,170 +18,7 @@ type SlackActionInvoke = (
   toolContext?: ChannelMessageActionContext["toolContext"],
 ) => Promise<AgentToolResult<unknown>>;
 
-type InteractiveButtonStyle = "primary" | "secondary" | "success" | "danger";
-
-type InteractiveReplyButton = {
-  label: string;
-  value: string;
-  style?: InteractiveButtonStyle;
-};
-
-type InteractiveReplyOption = {
-  label: string;
-  value: string;
-};
-
-type InteractiveReplyBlock =
-  | { type: "text"; text: string }
-  | { type: "buttons"; buttons: InteractiveReplyButton[] }
-  | { type: "select"; placeholder?: string; options: InteractiveReplyOption[] };
-
-type InteractiveReply = {
-  blocks: InteractiveReplyBlock[];
-};
-
-function readTrimmedString(value: unknown): string | undefined {
-  if (typeof value !== "string") {
-    return undefined;
-  }
-  const trimmed = value.trim();
-  return trimmed || undefined;
-}
-
-function normalizeButtonStyle(value: unknown): InteractiveButtonStyle | undefined {
-  const style = readTrimmedString(value)?.toLowerCase();
-  return style === "primary" || style === "secondary" || style === "success" || style === "danger"
-    ? style
-    : undefined;
-}
-
-function normalizeInteractiveButton(raw: unknown): InteractiveReplyButton | undefined {
-  if (!raw || typeof raw !== "object" || Array.isArray(raw)) {
-    return undefined;
-  }
-  const record = raw as Record<string, unknown>;
-  const label = readTrimmedString(record.label) ?? readTrimmedString(record.text);
-  const value =
-    readTrimmedString(record.value) ??
-    readTrimmedString(record.callbackData) ??
-    readTrimmedString(record.callback_data);
-  if (!label || !value) {
-    return undefined;
-  }
-  return { label, value, style: normalizeButtonStyle(record.style) };
-}
-
-function normalizeInteractiveOption(raw: unknown): InteractiveReplyOption | undefined {
-  if (!raw || typeof raw !== "object" || Array.isArray(raw)) {
-    return undefined;
-  }
-  const record = raw as Record<string, unknown>;
-  const label = readTrimmedString(record.label) ?? readTrimmedString(record.text);
-  const value = readTrimmedString(record.value);
-  return label && value ? { label, value } : undefined;
-}
-
-function normalizeInteractiveReply(raw: unknown): InteractiveReply | undefined {
-  if (!raw || typeof raw !== "object" || Array.isArray(raw)) {
-    return undefined;
-  }
-  const record = raw as Record<string, unknown>;
-  const blocks = Array.isArray(record.blocks)
-    ? record.blocks
-        .map((entry) => {
-          if (!entry || typeof entry !== "object" || Array.isArray(entry)) {
-            return undefined;
-          }
-          const block = entry as Record<string, unknown>;
-          const type = readTrimmedString(block.type)?.toLowerCase();
-          if (type === "text") {
-            const text = readTrimmedString(block.text);
-            return text ? ({ type: "text", text } as const) : undefined;
-          }
-          if (type === "buttons") {
-            const buttons = Array.isArray(block.buttons)
-              ? block.buttons
-                  .map((button) => normalizeInteractiveButton(button))
-                  .filter((button): button is InteractiveReplyButton => Boolean(button))
-              : [];
-            return buttons.length > 0 ? ({ type: "buttons", buttons } as const) : undefined;
-          }
-          if (type === "select") {
-            const options = Array.isArray(block.options)
-              ? block.options
-                  .map((option) => normalizeInteractiveOption(option))
-                  .filter((option): option is InteractiveReplyOption => Boolean(option))
-              : [];
-            return options.length > 0
-              ? ({
-                  type: "select",
-                  placeholder: readTrimmedString(block.placeholder),
-                  options,
-                } as const)
-              : undefined;
-          }
-          return undefined;
-        })
-        .filter((entry): entry is InteractiveReplyBlock => Boolean(entry))
-    : [];
-  return blocks.length > 0 ? { blocks } : undefined;
-}
-
-function readStringParam(
-  params: Record<string, unknown>,
-  key: string,
-  options: { required?: boolean; trim?: boolean; label?: string; allowEmpty?: boolean } = {},
-): string | undefined {
-  const { required = false, trim = true, label = key, allowEmpty = false } = options;
-  const raw = params[key];
-  if (typeof raw !== "string") {
-    if (required) {
-      throw new Error(`${label} required`);
-    }
-    return undefined;
-  }
-  const value = trim ? raw.trim() : raw;
-  if (!value && !allowEmpty) {
-    if (required) {
-      throw new Error(`${label} required`);
-    }
-    return undefined;
-  }
-  return value;
-}
-
-function readNumberParam(
-  params: Record<string, unknown>,
-  key: string,
-  options: { required?: boolean; label?: string; integer?: boolean; strict?: boolean } = {},
-): number | undefined {
-  const { required = false, label = key, integer = false, strict = false } = options;
-  const raw = params[key];
-  let value: number | undefined;
-  if (typeof raw === "number" && Number.isFinite(raw)) {
-    value = raw;
-  } else if (typeof raw === "string") {
-    const trimmed = raw.trim();
-    if (trimmed) {
-      const parsed = strict ? Number(trimmed) : Number.parseFloat(trimmed);
-      if (Number.isFinite(parsed)) {
-        value = parsed;
-      }
-    }
-  }
-  if (value === undefined) {
-    if (required) {
-      throw new Error(`${label} required`);
-    }
-    return undefined;
-  }
-  return integer ? Math.trunc(value) : value;
-}
-
-function readSlackBlocksParam(actionParams: Record<string, unknown>) {
-  return parseSlackBlocksInput(actionParams.blocks) as Record<string, unknown>[] | undefined;
-}
-
+/** Translate generic channel action requests into Slack-specific tool invocations and payload shapes. */
 export async function handleSlackMessageAction(params: {
   providerId: string;
   ctx: ChannelMessageActionContext;
@@ -187,27 +33,40 @@ export async function handleSlackMessageAction(params: {
     const channelId =
       readStringParam(actionParams, "channelId") ??
       readStringParam(actionParams, "to", { required: true });
-    if (!channelId) {
-      throw new Error("channelId required");
-    }
     return normalizeChannelId ? normalizeChannelId(channelId) : channelId;
   };
 
   if (action === "send") {
     const to = readStringParam(actionParams, "to", { required: true });
-    const content = readStringParam(actionParams, "message", { allowEmpty: true });
+    const content = readStringParam(actionParams, "message", {
+      required: false,
+      allowEmpty: true,
+    });
     const mediaUrl = readStringParam(actionParams, "media", { trim: false });
+    const presentation = normalizeMessagePresentation(actionParams.presentation);
     const interactive = normalizeInteractiveReply(actionParams.interactive);
-    const interactiveBlocks = interactive ? buildSlackInteractiveBlocks(interactive) : undefined;
-    const blocks = readSlackBlocksParam(actionParams) ?? interactiveBlocks;
+    const presentationBlocks = presentation
+      ? buildSlackPresentationBlocks(presentation)
+      : undefined;
+    const interactiveBlocks = interactive
+      ? buildSlackInteractiveBlocks(
+          interactive,
+          resolveSlackInteractiveBlockOffsets(presentationBlocks),
+        )
+      : undefined;
+    const mergedBlocks = [...(presentationBlocks ?? []), ...(interactiveBlocks ?? [])];
+    const blocks = mergedBlocks.length > 0 ? mergedBlocks : undefined;
     if (!content && !mediaUrl && !blocks) {
       throw new Error("Slack send requires message, blocks, or media.");
     }
-    if (mediaUrl && blocks) {
-      throw new Error("Slack send does not support blocks with media.");
+    const replyBroadcast = readBooleanParam(actionParams, "replyBroadcast");
+    if (replyBroadcast && mediaUrl) {
+      throw new Error("Slack replyBroadcast is only supported for text or block thread replies.");
     }
     const threadId = readStringParam(actionParams, "threadId");
     const replyTo = readStringParam(actionParams, "replyTo");
+    const topLevel =
+      readBooleanParam(actionParams, "topLevel") === true || actionParams.threadId === null;
     return await invoke(
       {
         action: "sendMessage",
@@ -216,6 +75,8 @@ export async function handleSlackMessageAction(params: {
         mediaUrl: mediaUrl ?? undefined,
         accountId,
         threadTs: threadId ?? replyTo ?? undefined,
+        ...(topLevel ? { topLevel: true } : {}),
+        ...(replyBroadcast ? { replyBroadcast } : {}),
         ...(blocks ? { blocks } : {}),
       },
       cfg,
@@ -224,20 +85,37 @@ export async function handleSlackMessageAction(params: {
   }
 
   if (action === "react") {
-    const messageId = readStringParam(actionParams, "messageId", { required: true });
+    const messageId = readStringParam(actionParams, "messageId", {
+      required: true,
+    });
     const emoji = readStringParam(actionParams, "emoji", { allowEmpty: true });
     const remove = typeof actionParams.remove === "boolean" ? actionParams.remove : undefined;
     return await invoke(
-      { action: "react", channelId: resolveChannelId(), messageId, emoji, remove, accountId },
+      {
+        action: "react",
+        channelId: resolveChannelId(),
+        messageId,
+        emoji,
+        remove,
+        accountId,
+      },
       cfg,
     );
   }
 
   if (action === "reactions") {
-    const messageId = readStringParam(actionParams, "messageId", { required: true });
+    const messageId = readStringParam(actionParams, "messageId", {
+      required: true,
+    });
     const limit = readNumberParam(actionParams, "limit", { integer: true });
     return await invoke(
-      { action: "reactions", channelId: resolveChannelId(), messageId, limit, accountId },
+      {
+        action: "reactions",
+        channelId: resolveChannelId(),
+        messageId,
+        limit,
+        accountId,
+      },
       cfg,
     );
   }
@@ -250,6 +128,7 @@ export async function handleSlackMessageAction(params: {
       limit,
       before: readStringParam(actionParams, "before"),
       after: readStringParam(actionParams, "after"),
+      messageId: readStringParam(actionParams, "messageId"),
       accountId,
     };
     if (includeReadThreadId) {
@@ -259,9 +138,12 @@ export async function handleSlackMessageAction(params: {
   }
 
   if (action === "edit") {
-    const messageId = readStringParam(actionParams, "messageId", { required: true });
+    const messageId = readStringParam(actionParams, "messageId", {
+      required: true,
+    });
     const content = readStringParam(actionParams, "message", { allowEmpty: true });
-    const blocks = readSlackBlocksParam(actionParams);
+    const presentation = normalizeMessagePresentation(actionParams.presentation);
+    const blocks = presentation ? buildSlackPresentationBlocks(presentation) : undefined;
     if (!content && !blocks) {
       throw new Error("Slack edit requires message or blocks.");
     }
@@ -279,9 +161,16 @@ export async function handleSlackMessageAction(params: {
   }
 
   if (action === "delete") {
-    const messageId = readStringParam(actionParams, "messageId", { required: true });
+    const messageId = readStringParam(actionParams, "messageId", {
+      required: true,
+    });
     return await invoke(
-      { action: "deleteMessage", channelId: resolveChannelId(), messageId, accountId },
+      {
+        action: "deleteMessage",
+        channelId: resolveChannelId(),
+        messageId,
+        accountId,
+      },
       cfg,
     );
   }
@@ -313,6 +202,14 @@ export async function handleSlackMessageAction(params: {
   }
 
   if (action === "download-file") {
+    const fileIdParam = readStringParam(actionParams, "fileId");
+    const messageIdParam =
+      readStringParam(actionParams, "messageId") ?? readStringParam(actionParams, "message_id");
+    if (!fileIdParam && messageIdParam) {
+      throw new Error(
+        "download-file requires fileId (the Slack file id, for example F0B0LTT8M36 from event.files[].id), not messageId. Did you mean to pass fileId? messageId is the Slack message timestamp and is used by react / reactions / edit / delete / pin / unpin actions, not download-file.",
+      );
+    }
     const fileId = readStringParam(actionParams, "fileId", { required: true });
     const channelId =
       readStringParam(actionParams, "channelId") ?? readStringParam(actionParams, "to");
@@ -327,6 +224,43 @@ export async function handleSlackMessageAction(params: {
         accountId,
       },
       cfg,
+    );
+  }
+
+  if (action === "upload-file") {
+    const replyBroadcast = readBooleanParam(actionParams, "replyBroadcast");
+    if (replyBroadcast) {
+      throw new Error("Slack replyBroadcast is only supported for text or block thread replies.");
+    }
+    const to = readStringParam(actionParams, "to") ?? resolveChannelId();
+    const filePath =
+      readStringParam(actionParams, "filePath", { trim: false }) ??
+      readStringParam(actionParams, "path", { trim: false }) ??
+      readStringParam(actionParams, "media", { trim: false });
+    if (!filePath) {
+      throw new Error("upload-file requires filePath, path, or media");
+    }
+    const threadId =
+      readStringParam(actionParams, "threadId") ?? readStringParam(actionParams, "replyTo");
+    const topLevel =
+      readBooleanParam(actionParams, "topLevel") === true || actionParams.threadId === null;
+    return await invoke(
+      {
+        action: "uploadFile",
+        to,
+        filePath,
+        initialComment:
+          readStringParam(actionParams, "initialComment", { allowEmpty: true }) ??
+          readStringParam(actionParams, "message", { allowEmpty: true }) ??
+          "",
+        filename: readStringParam(actionParams, "filename"),
+        title: readStringParam(actionParams, "title"),
+        threadTs: threadId ?? undefined,
+        ...(topLevel ? { topLevel: true } : {}),
+        accountId,
+      },
+      cfg,
+      ctx.toolContext,
     );
   }
 

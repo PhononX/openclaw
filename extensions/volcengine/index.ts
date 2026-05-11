@@ -1,25 +1,25 @@
-import { emptyPluginConfigSchema, type OpenClawPluginApi } from "openclaw/plugin-sdk/core";
-import {
-  buildDoubaoCodingProvider,
-  buildDoubaoProvider,
-} from "../../src/agents/models-config.providers.static.js";
-import { ensureModelAllowlistEntry } from "../../src/commands/model-allowlist.js";
-import { createProviderApiKeyAuthMethod } from "../../src/plugins/provider-api-key-auth.js";
+import { definePluginEntry } from "openclaw/plugin-sdk/plugin-entry";
+import { createProviderApiKeyAuthMethod } from "openclaw/plugin-sdk/provider-auth-api-key";
+import { ensureModelAllowlistEntry } from "openclaw/plugin-sdk/provider-onboard";
+import { applyVolcengineToolSchemaCompat } from "./api.js";
+import { DOUBAO_CODING_MODEL_CATALOG, DOUBAO_MODEL_CATALOG } from "./models.js";
+import { buildDoubaoCodingProvider, buildDoubaoProvider } from "./provider-catalog.js";
+import { buildVolcengineSpeechProvider } from "./speech-provider.js";
 
 const PROVIDER_ID = "volcengine";
 const VOLCENGINE_DEFAULT_MODEL_REF = "volcengine-plan/ark-code-latest";
 
-const volcenginePlugin = {
+export default definePluginEntry({
   id: PROVIDER_ID,
   name: "Volcengine Provider",
   description: "Bundled Volcengine provider plugin",
-  configSchema: emptyPluginConfigSchema(),
-  register(api: OpenClawPluginApi) {
+  register(api) {
     api.registerProvider({
       id: PROVIDER_ID,
       label: "Volcengine",
       docsPath: "/concepts/model-providers#volcano-engine-doubao",
       envVars: ["VOLCANO_ENGINE_API_KEY"],
+      hookAliases: ["volcengine-plan"],
       auth: [
         createProviderApiKeyAuthMethod({
           providerId: PROVIDER_ID,
@@ -61,8 +61,27 @@ const volcenginePlugin = {
           };
         },
       },
+      augmentModelCatalog: () => {
+        const volcengineModels = DOUBAO_MODEL_CATALOG.map((entry) => ({
+          provider: "volcengine",
+          id: entry.id,
+          name: entry.name,
+          reasoning: entry.reasoning,
+          input: [...entry.input],
+          contextWindow: entry.contextWindow,
+        }));
+        const volcenginePlanModels = DOUBAO_CODING_MODEL_CATALOG.map((entry) => ({
+          provider: "volcengine-plan",
+          id: entry.id,
+          name: entry.name,
+          reasoning: entry.reasoning,
+          input: [...entry.input],
+          contextWindow: entry.contextWindow,
+        }));
+        return [...volcengineModels, ...volcenginePlanModels];
+      },
+      normalizeResolvedModel: ({ model }) => applyVolcengineToolSchemaCompat(model),
     });
+    api.registerSpeechProvider(buildVolcengineSpeechProvider());
   },
-};
-
-export default volcenginePlugin;
+});

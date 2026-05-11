@@ -1,5 +1,5 @@
-import type { OpenClawConfig } from "openclaw/plugin-sdk/msteams";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import type { OpenClawConfig } from "../runtime-api.js";
 
 const mocks = vi.hoisted(() => ({
   sendMessageMSTeams: vi.fn(),
@@ -18,17 +18,35 @@ vi.mock("./polls.js", () => ({
   }),
 }));
 
-vi.mock("./runtime.js", () => ({
-  getMSTeamsRuntime: () => ({
-    channel: {
-      text: {
-        chunkMarkdownText: (text: string) => [text],
-      },
-    },
-  }),
-}));
-
 import { msteamsOutbound } from "./outbound.js";
+
+type MSTeamsSendText = NonNullable<typeof msteamsOutbound.sendText>;
+type MSTeamsSendMedia = NonNullable<typeof msteamsOutbound.sendMedia>;
+type MSTeamsSendPoll = NonNullable<typeof msteamsOutbound.sendPoll>;
+
+function requireSendText(): MSTeamsSendText {
+  const sendText = msteamsOutbound.sendText;
+  if (!sendText) {
+    throw new Error("Expected msteams outbound sendText");
+  }
+  return sendText;
+}
+
+function requireSendMedia(): MSTeamsSendMedia {
+  const sendMedia = msteamsOutbound.sendMedia;
+  if (!sendMedia) {
+    throw new Error("Expected msteams outbound sendMedia");
+  }
+  return sendMedia;
+}
+
+function requireSendPoll(): MSTeamsSendPoll {
+  const sendPoll = msteamsOutbound.sendPoll;
+  if (!sendPoll) {
+    throw new Error("Expected msteams outbound sendPoll");
+  }
+  return sendPoll;
+}
 
 describe("msteamsOutbound cfg threading", () => {
   beforeEach(() => {
@@ -56,7 +74,7 @@ describe("msteamsOutbound cfg threading", () => {
       },
     } as OpenClawConfig;
 
-    await msteamsOutbound.sendText!({
+    await requireSendText()({
       cfg,
       to: "conversation:abc",
       text: "hello",
@@ -78,7 +96,7 @@ describe("msteamsOutbound cfg threading", () => {
       },
     } as OpenClawConfig;
 
-    await msteamsOutbound.sendMedia!({
+    await requireSendMedia()({
       cfg,
       to: "conversation:abc",
       text: "photo",
@@ -104,7 +122,7 @@ describe("msteamsOutbound cfg threading", () => {
       },
     } as OpenClawConfig;
 
-    await msteamsOutbound.sendPoll!({
+    await requireSendPoll()({
       cfg,
       to: "conversation:abc",
       poll: {
@@ -120,12 +138,26 @@ describe("msteamsOutbound cfg threading", () => {
       options: ["Pizza", "Sushi"],
       maxSelections: 1,
     });
-    expect(mocks.createPoll).toHaveBeenCalledWith(
-      expect.objectContaining({
-        id: "poll-1",
-        question: "Snack?",
-        options: ["Pizza", "Sushi"],
-      }),
-    );
+    const [pollRecord] = mocks.createPoll.mock.calls[0] ?? [];
+    expect(pollRecord).toEqual({
+      id: "poll-1",
+      question: "Snack?",
+      options: ["Pizza", "Sushi"],
+      maxSelections: 1,
+      createdAt: pollRecord?.createdAt,
+      conversationId: "conv-1",
+      messageId: "msg-poll-1",
+      votes: {},
+    });
+    expect(Number.isNaN(Date.parse(pollRecord?.createdAt))).toBe(false);
+  });
+
+  it("chunks outbound text without requiring MSTeams runtime initialization", () => {
+    const chunker = msteamsOutbound.chunker;
+    if (!chunker) {
+      throw new Error("msteams outbound.chunker unavailable");
+    }
+
+    expect(chunker("alpha beta", 5)).toEqual(["alpha", "beta"]);
   });
 });

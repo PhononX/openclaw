@@ -4,13 +4,11 @@ import type { OpenClawConfig } from "../config/config.js";
 import { runHeartbeatOnce, type HeartbeatDeps } from "./heartbeat-runner.js";
 import { installHeartbeatRunnerTestRuntime } from "./heartbeat-runner.test-harness.js";
 import {
+  type HeartbeatReplySpy,
   seedMainSessionStore,
   withTempHeartbeatSandbox,
   withTempTelegramHeartbeatSandbox,
 } from "./heartbeat-runner.test-utils.js";
-
-// Avoid pulling optional runtime deps during isolated runs.
-vi.mock("jiti", () => ({ createJiti: () => () => ({}) }));
 
 installHeartbeatRunnerTestRuntime();
 
@@ -81,7 +79,7 @@ describe("runHeartbeatOnce ack handling", () => {
   async function runTelegramHeartbeatWithDefaults(params: {
     tmpDir: string;
     storePath: string;
-    replySpy: ReturnType<typeof vi.spyOn>;
+    replySpy: HeartbeatReplySpy;
     replyText: string;
     messages?: Record<string, unknown>;
     telegramOverrides?: Record<string, unknown>;
@@ -111,7 +109,10 @@ describe("runHeartbeatOnce ack handling", () => {
     const sendTelegram = createMessageSendSpy();
     await runHeartbeatOnce({
       cfg,
-      deps: makeTelegramDeps({ sendTelegram }),
+      deps: {
+        ...makeTelegramDeps({ sendTelegram }),
+        getReplyFromConfig: params.replySpy,
+      },
     });
     return sendTelegram;
   }
@@ -173,7 +174,10 @@ describe("runHeartbeatOnce ack handling", () => {
 
       await runHeartbeatOnce({
         cfg,
-        deps: makeWhatsAppDeps({ sendWhatsApp }),
+        deps: {
+          ...makeWhatsAppDeps({ sendWhatsApp }),
+          getReplyFromConfig: replySpy,
+        },
       });
 
       expect(sendWhatsApp).toHaveBeenCalled();
@@ -199,7 +203,10 @@ describe("runHeartbeatOnce ack handling", () => {
 
       await runHeartbeatOnce({
         cfg,
-        deps: makeWhatsAppDeps({ sendWhatsApp }),
+        deps: {
+          ...makeWhatsAppDeps({ sendWhatsApp }),
+          getReplyFromConfig: replySpy,
+        },
       });
 
       expect(sendWhatsApp).toHaveBeenCalledTimes(1);
@@ -261,7 +268,10 @@ describe("runHeartbeatOnce ack handling", () => {
 
       const result = await runHeartbeatOnce({
         cfg,
-        deps: makeWhatsAppDeps({ sendWhatsApp }),
+        deps: {
+          ...makeWhatsAppDeps({ sendWhatsApp }),
+          getReplyFromConfig: replySpy,
+        },
       });
 
       expect(replySpy).not.toHaveBeenCalled();
@@ -282,7 +292,10 @@ describe("runHeartbeatOnce ack handling", () => {
 
       await runHeartbeatOnce({
         cfg,
-        deps: makeWhatsAppDeps({ sendWhatsApp }),
+        deps: {
+          ...makeWhatsAppDeps({ sendWhatsApp }),
+          getReplyFromConfig: replySpy,
+        },
       });
 
       expect(sendWhatsApp).not.toHaveBeenCalled();
@@ -320,7 +333,10 @@ describe("runHeartbeatOnce ack handling", () => {
 
       await runHeartbeatOnce({
         cfg,
-        deps: makeWhatsAppDeps(),
+        deps: {
+          ...makeWhatsAppDeps(),
+          getReplyFromConfig: replySpy,
+        },
       });
 
       const finalStore = JSON.parse(await fs.readFile(storePath, "utf-8")) as Record<
@@ -343,15 +359,21 @@ describe("runHeartbeatOnce ack handling", () => {
 
       const res = await runHeartbeatOnce({
         cfg,
-        deps: makeWhatsAppDeps({
-          sendWhatsApp,
-          webAuthExists: async () => false,
-          hasActiveWebListener: () => false,
-        }),
+        deps: {
+          ...makeWhatsAppDeps({
+            sendWhatsApp,
+            webAuthExists: async () => false,
+            hasActiveWebListener: () => false,
+          }),
+          getReplyFromConfig: replySpy,
+        },
       });
 
       expect(res.status).toBe("skipped");
-      expect(res).toMatchObject({ reason: "whatsapp-not-linked" });
+      if (!("reason" in res)) {
+        throw new Error("expected skipped heartbeat result reason");
+      }
+      expect(res.reason).toBe("whatsapp-not-linked");
       expect(sendWhatsApp).not.toHaveBeenCalled();
     });
   });
@@ -379,15 +401,18 @@ describe("runHeartbeatOnce ack handling", () => {
 
       await runHeartbeatOnce({
         cfg,
-        deps: makeTelegramDeps({ sendTelegram }),
+        deps: {
+          ...makeTelegramDeps({ sendTelegram }),
+          getReplyFromConfig: replySpy,
+        },
       });
 
       expect(sendTelegram).toHaveBeenCalledTimes(1);
-      expect(sendTelegram).toHaveBeenCalledWith(
-        TELEGRAM_GROUP,
-        "Hello from heartbeat",
-        expect.objectContaining({ accountId: params.expectedAccountId, verbose: false }),
-      );
+      const [chatId, text, options] = sendTelegram.mock.calls[0] ?? [];
+      expect(chatId).toBe(TELEGRAM_GROUP);
+      expect(text).toBe("Hello from heartbeat");
+      expect(options?.accountId).toBe(params.expectedAccountId);
+      expect(options?.verbose).toBe(false);
     });
   }
 

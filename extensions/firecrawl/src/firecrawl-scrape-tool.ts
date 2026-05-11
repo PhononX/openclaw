@@ -1,7 +1,11 @@
-import { Type } from "@sinclair/typebox";
-import { optionalStringEnum } from "../../../src/agents/schema/typebox.js";
-import { jsonResult, readNumberParam, readStringParam } from "../../../src/agents/tools/common.js";
-import type { OpenClawPluginApi } from "../../../src/plugins/types.js";
+import { optionalStringEnum } from "openclaw/plugin-sdk/channel-actions";
+import type { OpenClawPluginApi } from "openclaw/plugin-sdk/plugin-runtime";
+import {
+  jsonResult,
+  readNumberParam,
+  readStringParam,
+} from "openclaw/plugin-sdk/provider-web-search";
+import { Type } from "typebox";
 import { runFirecrawlScrape } from "./firecrawl-client.js";
 
 const FirecrawlScrapeToolSchema = Type.Object(

@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { probeSlack } from "./probe.js";
 
 const authTestMock = vi.hoisted(() => vi.fn());
 const createSlackWebClientMock = vi.hoisted(() => vi.fn());
@@ -8,11 +9,9 @@ vi.mock("./client.js", () => ({
   createSlackWebClient: createSlackWebClientMock,
 }));
 
-vi.mock("../../../src/utils/with-timeout.js", () => ({
+vi.mock("openclaw/plugin-sdk/text-utility-runtime", () => ({
   withTimeout: withTimeoutMock,
 }));
-
-const { probeSlack } = await import("./probe.js");
 
 describe("probeSlack", () => {
   beforeEach(() => {
@@ -46,7 +45,9 @@ describe("probeSlack", () => {
       team: { id: "T123", name: "OpenClaw" },
     });
     expect(createSlackWebClientMock).toHaveBeenCalledWith("xoxb-test");
-    expect(withTimeoutMock).toHaveBeenCalledWith(expect.any(Promise), 2500);
+    expect(withTimeoutMock).toHaveBeenCalledTimes(1);
+    expect(withTimeoutMock.mock.calls[0]?.[0]).toBeInstanceOf(Promise);
+    expect(withTimeoutMock.mock.calls[0]?.[1]).toBe(2500);
   });
 
   it("keeps optional auth metadata fields undefined when Slack omits them", async () => {
