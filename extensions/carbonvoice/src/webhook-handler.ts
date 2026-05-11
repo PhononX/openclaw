@@ -108,6 +108,9 @@ export function createCarbonVoiceWebhookHandler(params: {
     }
 
     const payload = readResult.value as CarbonVoiceWebhookPayload;
+    if (log) {
+      log.info(`carbonvoice: webhook payload: ${JSON.stringify(payload)}`);
+    }
     if (!payload || typeof payload !== "object") {
       respondJson(res, 400, { error: "Invalid payload" });
       return;

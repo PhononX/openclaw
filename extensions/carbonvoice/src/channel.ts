@@ -177,7 +177,7 @@ export const carbonVoicePlugin = {
       });
 
       try {
-        const subscribePath = `/apps/${encodeURIComponent(account.clientId)}/subscribe`;
+        const subscribePath = `/apps/subscribe`;
         log?.info?.(
           `Carbon Voice: subscribe request account=${accountId} baseUrl=${account.baseUrl} path=${subscribePath} body=${JSON.stringify(subscribeBody)}`,
         );
