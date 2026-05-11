@@ -140,14 +140,13 @@ export function resolveCarbonVoiceWhoAmIUserId(
 
 export async function carbonVoiceSubscribeToMessages(
   opts: CarbonVoiceClientOptions & {
-    clientId: string;
     payload: unknown;
   },
 ): Promise<unknown> {
   return await carbonVoiceRequest<unknown>({
     ...opts,
     method: "POST",
-    path: `/apps/${encodeURIComponent(opts.clientId)}/subscribe`,
+    path: `/apps/subscribe`,
     body: opts.payload,
   });
 }

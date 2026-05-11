@@ -181,7 +181,6 @@ export const carbonVoicePlugin = {
         );
         await carbonVoiceSubscribeToMessages({
           apiKey: account.apiKey,
-          clientId: account.clientId,
           baseUrl: account.baseUrl,
           payload: subscribeBody,
         });
