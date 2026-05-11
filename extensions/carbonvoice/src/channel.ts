@@ -1,10 +1,10 @@
 import { randomUUID } from "node:crypto";
-import {
-  registerPluginHttpRoute,
-  resolveInboundRouteEnvelopeBuilderWithRuntime,
-  type ChannelGatewayContext,
-  type ChannelOutboundContext,
-} from "openclaw/plugin-sdk/compat";
+import type {
+  ChannelGatewayContext,
+  ChannelOutboundContext,
+} from "openclaw/plugin-sdk/channel-contract";
+import { resolveInboundRouteEnvelopeBuilderWithRuntime } from "openclaw/plugin-sdk/inbound-envelope";
+import { registerPluginHttpRoute } from "openclaw/plugin-sdk/webhook-ingress";
 import { getCarbonVoiceRuntime } from "../runtime.js";
 import {
   carbonVoiceStartMessage,

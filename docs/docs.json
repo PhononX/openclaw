@@ -1055,6 +1055,7 @@
               {
                 "group": "Mainstream messaging",
                 "pages": [
+                  "channels/carbonvoice",
                   "channels/discord",
                   "channels/slack",
                   "channels/telegram",

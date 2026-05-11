@@ -1,4 +1,4 @@
-import type { OpenClawConfig } from "openclaw/plugin-sdk/compat";
+import type { OpenClawConfig } from "openclaw/plugin-sdk/config-contracts";
 
 export const CARBONVOICE_CHANNEL_ID = "carbonvoice";
 export const CARBONVOICE_DEFAULT_ACCOUNT_ID = "default";

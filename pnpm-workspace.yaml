@@ -4,7 +4,12 @@ packages:
   - packages/*
   - extensions/*
 
-minimumReleaseAge: 2880
+# Set to 0 so installs work with registries that omit publish `time` in metadata (ERR_PNPM_MISSING_TIME)
+# or freshly published packages (ERR_PNPM_NO_MATURE_MATCHING_VERSION). Raise locally if you use npmjs.org only.
+minimumReleaseAge: 0
+
+# Baileys (WhatsApp) optional `libsignal` resolves via git tarball; pnpm 11 defaults blockExoticSubdeps=true which rejects exotic subdeps.
+blockExoticSubdeps: false
 
 minimumReleaseAgeExclude:
   - "acpx"

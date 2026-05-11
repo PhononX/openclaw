@@ -1,6 +1,12 @@
 {
   "id": "carbonvoice",
+  "activation": {
+    "onStartup": false
+  },
   "channels": ["carbonvoice"],
+  "channelEnvVars": {
+    "carbonvoice": ["CARBONVOICE_API_KEY"]
+  },
   "configSchema": {
     "type": "object",
     "additionalProperties": false,
