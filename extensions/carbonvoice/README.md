@@ -50,16 +50,20 @@ The plugin install runs `npm install --omit=dev` in the extension directory. Ens
 
 Channel config lives under `channels.carbonvoice` (multi-account under `accounts.<accountId>`).
 
+**Credential:** set the **`AGENT_PAT`** environment variable to your Carbon Voice agent personal access token (`cv_pat_...`) for the default account, or set `apiKey` on the account in config (same value). On startup, OpenClaw calls `GET /whoami` and subscribes with filters so the bot’s own messages are excluded; if you set **`creatorId`**, an extra filter limits inbound to that user only.
+
 Typical fields per account:
 
-- `clientId` — OAuth2 app `client_id` (used in `/apps/{client_id}/subscribe`).
-- `apiKey` — API key (`x-api-key` on Carbon Voice API).
-- `creatorId` — Carbon Voice user id allowed to trigger inbound messages.
+- `creatorId` (optional) — Carbon Voice user id; when set, only messages from this user are delivered (in addition to excluding the PAT user).
 - `baseUrl` — API base (default `https://api.carbonvoice.app`).
 - `publicWebhookBaseUrl` — public origin of your OpenClaw gateway (webhook delivery).
 - `webhookPath` — path on the gateway for Carbon Voice webhooks (default `/openclaw/carbonvoice/webhook`).
 
-Example:
+Example (PAT via env):
+
+```bash
+export AGENT_PAT="cv_pat_..."
+```
 
 ```json5
 {
@@ -68,10 +72,8 @@ Example:
       accounts: {
         default: {
           enabled: true,
-          clientId: "YOUR_CLIENT_ID",
-          apiKey: "YOUR_API_KEY",
-          creatorId: "YOUR_USER_GUID",
           publicWebhookBaseUrl: "https://gateway.example.com",
+          // optional: "creatorId": "YOUR_USER_GUID",
         },
       },
     },

@@ -10,6 +10,7 @@ import {
   carbonVoiceStartMessage,
   carbonVoiceSubscribeToMessages,
   carbonVoiceWhoAmI,
+  isCarbonVoiceDuplicateWebhookSubscribeError,
   resolveCarbonVoiceWhoAmIUserId,
 } from "./api-client.js";
 import {
@@ -75,8 +76,7 @@ export const carbonVoicePlugin = {
       name: account.name,
       enabled: account.enabled,
       configured: account.configured,
-      clientId: account.clientId ?? "[missing]",
-      allowedUserId: account.creatorId ?? "[missing]",
+      allowedUserId: account.creatorId ?? "(any)",
       baseUrl: account.baseUrl ?? "[missing]",
       publicWebhookBaseUrl: account.publicWebhookBaseUrl ?? "[missing]",
       webhookPath: account.webhookPath ?? "[missing]",
@@ -88,12 +88,9 @@ export const carbonVoicePlugin = {
     sendText: async ({ cfg, to, text, accountId, replyToId }: ChannelOutboundContext) => {
       const resolvedAccountId = accountId?.trim() || resolveDefaultCarbonVoiceAccountId(cfg);
       const account = resolveCarbonVoiceAccount({ cfg, accountId: resolvedAccountId });
-      if (!account.clientId) {
-        throw new Error("Carbon Voice: missing clientId");
-      }
       if (!account.apiKey) {
         throw new Error(
-          "Carbon Voice: missing apiKey (configure channels.carbonvoice or CARBONVOICE_API_KEY)",
+          "Carbon Voice: missing credential (configure channels.carbonvoice.apiKey or AGENT_PAT)",
         );
       }
       const payload = {
@@ -138,7 +135,6 @@ export const carbonVoicePlugin = {
         return waitUntilAbort(abortSignal);
       }
       if (
-        !account.clientId ||
         !account.apiKey ||
         !account.baseUrl ||
         !account.publicWebhookBaseUrl ||
@@ -186,8 +182,14 @@ export const carbonVoicePlugin = {
         });
         log?.info?.(`Carbon Voice: subscribed webhook ${webhookUrl} (account ${accountId})`);
       } catch (err) {
-        log?.error?.(`Carbon Voice: subscribe failed: ${String(err)}`);
-        return waitUntilAbort(abortSignal);
+        if (isCarbonVoiceDuplicateWebhookSubscribeError(err)) {
+          log?.info?.(
+            `Carbon Voice: subscribe returned duplicate webhook URL (400); continuing with existing subscription (${webhookUrl}, account ${accountId})`,
+          );
+        } else {
+          log?.error?.(`Carbon Voice: subscribe failed: ${String(err)}`);
+          return waitUntilAbort(abortSignal);
+        }
       }
 
       // Websocket path kept for quick rollback while webhook path is primary.
@@ -204,7 +206,7 @@ export const carbonVoicePlugin = {
         recentMessageIds: recentIds,
         log,
         deliver: async (msg) => {
-          const currentCfg = await getCarbonVoiceRuntime().config.loadConfig();
+          const currentCfg = getCarbonVoiceRuntime().config.current();
           const { route, buildEnvelope } = resolveInboundRouteEnvelopeBuilderWithRuntime({
             cfg: currentCfg,
             channel: CARBONVOICE_CHANNEL_ID,

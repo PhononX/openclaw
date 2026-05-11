@@ -1,7 +1,9 @@
-import { createPluginRuntimeStore } from "openclaw/plugin-sdk/compat";
-import type { PluginRuntime } from "openclaw/plugin-sdk/core";
+import { createPluginRuntimeStore, type PluginRuntime } from "openclaw/plugin-sdk/runtime-store";
 
 const { setRuntime: setCarbonVoiceRuntime, getRuntime: getCarbonVoiceRuntime } =
-  createPluginRuntimeStore<PluginRuntime>("Carbon Voice runtime not initialized");
+  createPluginRuntimeStore<PluginRuntime>({
+    pluginId: "carbonvoice",
+    errorMessage: "Carbon Voice runtime not initialized",
+  });
 
 export { getCarbonVoiceRuntime, setCarbonVoiceRuntime };

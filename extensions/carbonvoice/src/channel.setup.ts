@@ -37,7 +37,7 @@ export const carbonVoiceSetupPlugin = {
       name: account.name,
       enabled: account.enabled,
       configured: account.configured,
-      allowedUserId: account.creatorId ?? "[missing]",
+      allowedUserId: account.creatorId ?? "(any)",
       baseUrl: account.baseUrl ?? "[missing]",
       credentialSource: account.apiKey ? "apiKey" : "missing",
     }),

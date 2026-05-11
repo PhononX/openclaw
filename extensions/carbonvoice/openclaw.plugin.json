@@ -5,7 +5,7 @@
   },
   "channels": ["carbonvoice"],
   "channelEnvVars": {
-    "carbonvoice": ["CARBONVOICE_API_KEY"]
+    "carbonvoice": ["AGENT_PAT"]
   },
   "configSchema": {
     "type": "object",

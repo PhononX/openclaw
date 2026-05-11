@@ -138,6 +138,21 @@ export function resolveCarbonVoiceWhoAmIUserId(
   return undefined;
 }
 
+/**
+ * True when subscribe failed because this webhook URL is already registered (gateway restart / duplicate subscribe).
+ * Matches {@link carbonVoiceRequest} error text: `Carbon Voice API error 400 ...` plus body mentioning same webhook URL.
+ */
+export function isCarbonVoiceDuplicateWebhookSubscribeError(err: unknown): boolean {
+  if (!(err instanceof Error)) {
+    return false;
+  }
+  const msg = err.message;
+  if (!msg.includes("Carbon Voice API error 400")) {
+    return false;
+  }
+  return msg.toLowerCase().includes("same webhook url");
+}
+
 export async function carbonVoiceSubscribeToMessages(
   opts: CarbonVoiceClientOptions & {
     payload: unknown;

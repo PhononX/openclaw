@@ -19,12 +19,10 @@ export const carbonVoiceMeta = {
 export type CarbonVoiceAccountConfig = {
   enabled?: boolean;
   name?: string;
-  /** OAuth2 app client_id (path param for `/apps/{client_id}/subscribe`). */
-  clientId?: string;
-  /** Carbon Voice API key, sent as `x-api-key` for API auth. */
+  /** Carbon Voice API key or PAT (`cv_pat_...`); PATs use Bearer auth. */
   apiKey?: string;
   apiKeyFile?: string;
-  /** Carbon Voice user id allowed to trigger inbound messages. */
+  /** Optional: only this Carbon Voice user id may trigger inbound (subscription adds creator_id eq). */
   creatorId?: string;
   baseUrl?: string;
   /** Public origin for your OpenClaw gateway (for webhook delivery). */
@@ -39,7 +37,6 @@ export type CarbonVoiceResolvedAccount = {
   configured: boolean;
   unconfiguredReason?: string;
   name?: string;
-  clientId?: string;
   apiKey?: string;
   creatorId?: string;
   baseUrl?: string;
@@ -51,7 +48,6 @@ export type CarbonVoiceResolvedAccount = {
 type CarbonVoiceChannelConfig = {
   enabled?: boolean;
   accounts?: Record<string, CarbonVoiceAccountConfig>;
-  clientId?: string;
   apiKey?: string;
   apiKeyFile?: string;
   creatorId?: string;
@@ -78,7 +74,6 @@ function getLegacyDefaultAccount(cfg: OpenClawConfig): CarbonVoiceAccountConfig 
   return {
     enabled: channel.enabled,
     name: channel.name,
-    clientId: channel.clientId,
     apiKey: channel.apiKey,
     apiKeyFile: channel.apiKeyFile,
     creatorId: channel.creatorId,
@@ -99,13 +94,7 @@ function computeConfigured(
 ): { configured: boolean; unconfiguredReason?: string } {
   const reasons: string[] = [];
   if (!resolved.apiKey) {
-    reasons.push("missing apiKey (or CARBONVOICE_API_KEY for default account)");
-  }
-  if (!resolved.clientId) {
-    reasons.push("missing clientId");
-  }
-  if (!resolved.creatorId) {
-    reasons.push("missing creatorId (allowed Carbon Voice user id)");
+    reasons.push("missing apiKey (or AGENT_PAT for default account)");
   }
   if (!resolved.publicWebhookBaseUrl) {
     reasons.push("missing publicWebhookBaseUrl");
@@ -123,7 +112,6 @@ export function listCarbonVoiceAccountIds(cfg: OpenClawConfig): string[] {
   }
   const legacy = getLegacyDefaultAccount(cfg);
   if (
-    legacy.clientId ||
     legacy.apiKey ||
     legacy.apiKeyFile ||
     legacy.creatorId ||
@@ -152,12 +140,9 @@ export function resolveCarbonVoiceAccount(params: {
     accounts[accountId] ??
     (accountId === CARBONVOICE_DEFAULT_ACCOUNT_ID ? getLegacyDefaultAccount(params.cfg) : {});
 
-  const clientId = config.clientId?.trim() || undefined;
   const apiKey =
     config.apiKey?.trim() ||
-    (accountId === CARBONVOICE_DEFAULT_ACCOUNT_ID
-      ? process.env.CARBONVOICE_API_KEY?.trim()
-      : undefined) ||
+    (accountId === CARBONVOICE_DEFAULT_ACCOUNT_ID ? process.env.AGENT_PAT?.trim() : undefined) ||
     undefined;
   const creatorId = config.creatorId?.trim() || undefined;
   const baseUrl = config.baseUrl?.trim() || CARBONVOICE_DEFAULT_BASE_URL;
@@ -170,7 +155,6 @@ export function resolveCarbonVoiceAccount(params: {
     accountId,
     enabled: config.enabled !== false,
     name: config.name?.trim() || undefined,
-    clientId,
     apiKey,
     creatorId,
     baseUrl,
@@ -244,7 +228,6 @@ export function deleteCarbonVoiceAccount(params: {
 const accountProps = {
   enabled: { type: "boolean" },
   name: { type: "string" },
-  clientId: { type: "string" },
   apiKey: { type: "string" },
   apiKeyFile: { type: "string" },
   creatorId: { type: "string" },
@@ -259,7 +242,6 @@ export const carbonVoiceConfigSchema = {
   properties: {
     enabled: { type: "boolean" },
     name: { type: "string" },
-    clientId: { type: "string" },
     apiKey: { type: "string" },
     apiKeyFile: { type: "string" },
     creatorId: { type: "string" },
@@ -288,7 +270,7 @@ export const carbonVoiceSetupWizard = {
       const account = resolveCarbonVoiceAccount({ cfg, accountId: CARBONVOICE_DEFAULT_ACCOUNT_ID });
       return [
         configured
-          ? `Carbon Voice: configured (${account.clientId ?? "app configured"})`
+          ? "Carbon Voice: configured"
           : `Carbon Voice: not configured${account.unconfiguredReason ? ` (${account.unconfiguredReason})` : ""}`,
       ];
     },
@@ -298,7 +280,7 @@ export const carbonVoiceSetupWizard = {
   introNote: {
     title: "Carbon Voice setup",
     lines: [
-      "Connect Carbon Voice with OpenClaw using an API key or PAT.",
+      "Connect Carbon Voice with OpenClaw using a Carbon Voice agent PAT (AGENT_PAT or channels.carbonvoice apiKey).",
       "OpenClaw subscribes webhooks and receives message.posted.to.channel events.",
       `API base URL defaults to ${CARBONVOICE_DEFAULT_BASE_URL}.`,
       "Docs: /channels/carbonvoice",
@@ -308,11 +290,11 @@ export const carbonVoiceSetupWizard = {
     {
       inputKey: "apiKey",
       providerHint: CARBONVOICE_CHANNEL_ID,
-      credentialLabel: "API key",
-      preferredEnvVar: "CARBONVOICE_API_KEY",
-      envPrompt: "CARBONVOICE_API_KEY detected. Use env var?",
-      keepPrompt: "Carbon Voice API key already configured. Keep it?",
-      inputPrompt: "Enter Carbon Voice API key",
+      credentialLabel: "Agent PAT",
+      preferredEnvVar: "AGENT_PAT",
+      envPrompt: "AGENT_PAT detected. Use env var?",
+      keepPrompt: "Carbon Voice PAT already configured. Keep it?",
+      inputPrompt: "Enter Carbon Voice agent PAT",
       allowEnv: ({ accountId }: { accountId: string }) =>
         accountId === CARBONVOICE_DEFAULT_ACCOUNT_ID,
       inspect: ({ cfg, accountId }: { cfg: OpenClawConfig; accountId: string }) => {
@@ -323,7 +305,7 @@ export const carbonVoiceSetupWizard = {
           resolvedValue: account.config?.apiKey,
           envValue:
             accountId === CARBONVOICE_DEFAULT_ACCOUNT_ID
-              ? process.env.CARBONVOICE_API_KEY?.trim() || undefined
+              ? process.env.AGENT_PAT?.trim() || undefined
               : undefined,
         };
       },
@@ -349,37 +331,17 @@ export const carbonVoiceSetupWizard = {
   ],
   textInputs: [
     {
-      inputKey: "clientId",
-      message: "Enter Carbon Voice app client_id",
-      placeholder: "client_id",
-      required: true,
-      currentValue: ({ cfg, accountId }: { cfg: OpenClawConfig; accountId: string }) =>
-        resolveCarbonVoiceAccount({ cfg, accountId }).clientId,
-      keepPrompt: (value: string) => `Client ID is ${value}. Keep it?`,
-      normalizeValue: ({ value }: { value: string }) => value.trim(),
-      validate: ({ value }: { value: string }) =>
-        value.trim() ? undefined : "client_id is required",
-      applySet: ({
-        cfg,
-        accountId,
-        value,
-      }: {
-        cfg: OpenClawConfig;
-        accountId: string;
-        value: string;
-      }) => setCarbonVoiceAccountConfig(cfg, accountId, { clientId: value.trim() }),
-    },
-    {
       inputKey: "creatorIdFilter",
-      message: "Enter allowed Carbon Voice user id (only this user can trigger the agent)",
+      message:
+        "Optional: restrict inbound to one Carbon Voice user id (leave empty to allow any non-bot sender)",
       placeholder: "user_guid",
-      required: true,
+      required: false,
+      applyEmptyValue: true,
       currentValue: ({ cfg, accountId }: { cfg: OpenClawConfig; accountId: string }) =>
         resolveCarbonVoiceAccount({ cfg, accountId }).creatorId,
       keepPrompt: (value: string) => `Allowed user id is ${value}. Keep it?`,
       normalizeValue: ({ value }: { value: string }) => value.trim(),
-      validate: ({ value }: { value: string }) =>
-        value.trim() ? undefined : "allowed user id is required",
+      validate: () => undefined,
       applySet: ({
         cfg,
         accountId,
@@ -388,7 +350,10 @@ export const carbonVoiceSetupWizard = {
         cfg: OpenClawConfig;
         accountId: string;
         value: string;
-      }) => setCarbonVoiceAccountConfig(cfg, accountId, { creatorId: value.trim() }),
+      }) =>
+        setCarbonVoiceAccountConfig(cfg, accountId, {
+          creatorId: value.trim() ? value.trim() : undefined,
+        }),
     },
     {
       inputKey: "publicWebhookBaseUrl",

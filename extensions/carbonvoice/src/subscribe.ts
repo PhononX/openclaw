@@ -13,7 +13,7 @@ export type CarbonVoiceSubscribeRequestBody = {
 };
 
 /**
- * Build the POST body for `/apps/{client_id}/subscribe` (strict-spec).
+ * Build the POST body for `POST /apps/subscribe` (strict-spec).
  * Filters use message `creator_id` on the server side (matches Mongo message schema).
  */
 export function buildCarbonVoiceSubscribePayload(params: {
