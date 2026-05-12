@@ -5,13 +5,24 @@ export const CARBONVOICE_DEFAULT_ACCOUNT_ID = "default";
 export const CARBONVOICE_DEFAULT_BASE_URL = "https://api.carbonvoice.app";
 export const CARBONVOICE_DEFAULT_WEBHOOK_PATH = "/openclaw/carbonvoice/webhook";
 
+export function normalizeCarbonVoiceTarget(target: string): string | undefined {
+  const trimmed = target.trim();
+  if (!trimmed) {
+    return undefined;
+  }
+  const withoutProvider = trimmed.replace(/^carbonvoice:/i, "");
+  const withoutKind = withoutProvider.replace(/^(channel|conversation|direct):/i, "");
+  return withoutKind.trim() || undefined;
+}
+
 export const carbonVoiceMeta = {
   id: CARBONVOICE_CHANNEL_ID,
   label: "Carbon Voice",
   selectionLabel: "Carbon Voice",
   docsPath: "/channels/carbonvoice",
   docsLabel: "carbonvoice",
-  blurb: "Carbon Voice API webhooks and text replies (voice/TTS on the Carbon Voice side).",
+  blurb:
+    "Carbon Voice PAT websocket and optional webhooks; text replies (voice/TTS on the Carbon Voice side).",
   detailLabel: "Carbon Voice",
   order: 72,
 } as const;
@@ -95,9 +106,6 @@ function computeConfigured(
   const reasons: string[] = [];
   if (!resolved.apiKey) {
     reasons.push("missing apiKey (or AGENT_PAT for default account)");
-  }
-  if (!resolved.publicWebhookBaseUrl) {
-    reasons.push("missing publicWebhookBaseUrl");
   }
   if (reasons.length > 0) {
     return { configured: false, unconfiguredReason: reasons.join("; ") };
@@ -281,7 +289,8 @@ export const carbonVoiceSetupWizard = {
     title: "Carbon Voice setup",
     lines: [
       "Connect Carbon Voice with OpenClaw using a Carbon Voice agent PAT (AGENT_PAT or channels.carbonvoice apiKey).",
-      "OpenClaw subscribes webhooks and receives message.posted.to.channel events.",
+      "PAT-only: OpenClaw uses a realtime websocket plus POST /v3/messages/recent catch-up after disconnects.",
+      "Optional: set publicWebhookBaseUrl to also subscribe message.posted.to.channel webhooks on your gateway.",
       `API base URL defaults to ${CARBONVOICE_DEFAULT_BASE_URL}.`,
       "Docs: /channels/carbonvoice",
     ] as string[],
@@ -357,15 +366,20 @@ export const carbonVoiceSetupWizard = {
     },
     {
       inputKey: "publicWebhookBaseUrl",
-      message: "Enter public webhook base URL (e.g. https://gateway.example.com)",
+      message:
+        "Optional: public webhook base URL for Carbon Voice to POST events (e.g. https://gateway.example.com). Leave empty for PAT-only websocket mode.",
       placeholder: "https://…",
-      required: true,
+      required: false,
       currentValue: ({ cfg, accountId }: { cfg: OpenClawConfig; accountId: string }) =>
         resolveCarbonVoiceAccount({ cfg, accountId }).publicWebhookBaseUrl,
       keepPrompt: (value: string) => `Public webhook URL is ${value}. Keep it?`,
       validate: ({ value }: { value: string }) => {
+        const v = value.trim();
+        if (!v) {
+          return undefined;
+        }
         try {
-          const url = new URL(value);
+          const url = new URL(v);
           if (url.protocol !== "http:" && url.protocol !== "https:") {
             return "URL must start with http:// or https://";
           }
@@ -375,6 +389,7 @@ export const carbonVoiceSetupWizard = {
         }
       },
       normalizeValue: ({ value }: { value: string }) => value.trim().replace(/\/$/, ""),
+      applyEmptyValue: true,
       applySet: ({
         cfg,
         accountId,
@@ -383,7 +398,10 @@ export const carbonVoiceSetupWizard = {
         cfg: OpenClawConfig;
         accountId: string;
         value: string;
-      }) => setCarbonVoiceAccountConfig(cfg, accountId, { publicWebhookBaseUrl: value }),
+      }) =>
+        setCarbonVoiceAccountConfig(cfg, accountId, {
+          publicWebhookBaseUrl: value.trim() ? value : undefined,
+        }),
     },
     {
       inputKey: "webhookPath",

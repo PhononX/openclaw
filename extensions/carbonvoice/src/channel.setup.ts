@@ -39,6 +39,8 @@ export const carbonVoiceSetupPlugin = {
       configured: account.configured,
       allowedUserId: account.creatorId ?? "(any)",
       baseUrl: account.baseUrl ?? "[missing]",
+      publicWebhookBaseUrl: account.publicWebhookBaseUrl ?? "(PAT-only / websocket)",
+      webhookPath: account.webhookPath ?? "(none)",
       credentialSource: account.apiKey ? "apiKey" : "missing",
     }),
   },

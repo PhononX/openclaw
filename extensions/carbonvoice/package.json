@@ -12,29 +12,20 @@
   "dependencies": {
     "socket.io-client": "^4.8.3"
   },
+  "devDependencies": {
+    "@openclaw/plugin-sdk": "workspace:*",
+    "openclaw": "workspace:*"
+  },
   "peerDependencies": {
     "openclaw": ">=2026.3.14"
   },
-  "files": [
-    "index.ts",
-    "runtime.ts",
-    "setup-entry.ts",
-    "openclaw.plugin.json",
-    "src/api-client.ts",
-    "src/channel.ts",
-    "src/channel.setup.ts",
-    "src/shared.ts",
-    "src/stream-client.ts",
-    "src/subscribe.ts",
-    "src/webhook-handler.ts",
-    "src/webhook-payload.ts",
-    "README.md",
-    "CHANGELOG.md"
-  ],
+  "peerDependenciesMeta": {
+    "openclaw": {
+      "optional": true
+    }
+  },
   "openclaw": {
-    "extensions": [
-      "./index.ts"
-    ],
+    "extensions": ["./index.ts"],
     "setupEntry": "./setup-entry.ts",
     "channel": {
       "id": "carbonvoice",
@@ -48,7 +39,18 @@
     "install": {
       "npmSpec": "@openclaw/carbonvoice",
       "localPath": "extensions/carbonvoice",
-      "defaultChoice": "local"
+      "defaultChoice": "npm",
+      "minHostVersion": ">=2026.3.14"
+    },
+    "compat": {
+      "pluginApi": ">=2026.3.14"
+    },
+    "build": {
+      "openclawVersion": "2026.3.14"
+    },
+    "release": {
+      "publishToClawHub": true,
+      "publishToNpm": true
     },
     "releaseChecks": {
       "rootDependencyMirrorAllowlist": ["socket.io-client"]

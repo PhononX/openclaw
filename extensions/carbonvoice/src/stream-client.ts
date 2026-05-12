@@ -14,6 +14,8 @@ export function startCarbonVoiceMessageStream(params: {
     error?: (message: string) => void;
   };
   onMessageCreated: (messageId: string) => Promise<void>;
+  onConnected?: (info: { socketId?: string }) => void | Promise<void>;
+  onDisconnected?: (info: { reason: string }) => void | Promise<void>;
 }): CarbonVoiceStreamClient {
   const headers = buildCarbonVoiceAuthHeaders(params.apiKey);
   params.log?.info?.(`Carbon Voice websocket connecting to ${params.baseUrl}`);
@@ -24,9 +26,17 @@ export function startCarbonVoiceMessageStream(params: {
 
   socket.on("connect", () => {
     params.log?.info?.(`Carbon Voice websocket connected (${socket.id})`);
+    void Promise.resolve(params.onConnected?.({ socketId: socket.id })).catch((err: unknown) => {
+      params.log?.error?.(`Carbon Voice websocket onConnected error: ${String(err)}`);
+    });
   });
   socket.on("disconnect", (reason) => {
     params.log?.warn?.(`Carbon Voice websocket disconnected: ${reason}`);
+    void Promise.resolve(params.onDisconnected?.({ reason: String(reason) })).catch(
+      (err: unknown) => {
+        params.log?.error?.(`Carbon Voice websocket onDisconnected error: ${String(err)}`);
+      },
+    );
   });
   socket.on("connect_error", (err) => {
     params.log?.error?.(`Carbon Voice websocket connect error: ${String(err)}`);
