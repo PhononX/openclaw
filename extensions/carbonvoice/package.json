@@ -1,13 +1,17 @@
 {
-  "name": "@openclaw/carbonvoice",
-  "version": "2026.3.14",
+  "name": "@carbonvoice/openclaw-extension",
+  "version": "2026.5.12-beta.1",
   "description": "OpenClaw Carbon Voice channel plugin",
   "type": "module",
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/openclaw/openclaw.git",
+    "url": "https://github.com/openclaw/openclaw",
     "directory": "extensions/carbonvoice"
+  },
+  "publishConfig": {
+    "access": "public",
+    "registry": "https://registry.npmjs.org/"
   },
   "dependencies": {
     "socket.io-client": "^4.8.3"
@@ -37,7 +41,7 @@
       "order": 72
     },
     "install": {
-      "npmSpec": "@openclaw/carbonvoice",
+      "npmSpec": "@carbonvoice/openclaw-extension",
       "localPath": "extensions/carbonvoice",
       "defaultChoice": "npm",
       "minHostVersion": ">=2026.3.14"
@@ -49,8 +53,8 @@
       "openclawVersion": "2026.3.14"
     },
     "release": {
-      "publishToClawHub": true,
-      "publishToNpm": true
+      "publishToClawHub": false,
+      "publishToNpm": false
     },
     "releaseChecks": {
       "rootDependencyMirrorAllowlist": ["socket.io-client"]

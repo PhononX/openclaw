@@ -1,6 +1,8 @@
-# @openclaw/carbonvoice
+# @carbonvoice/openclaw-extension
 
 OpenClaw channel plugin for **Carbon Voice**: PAT websocket plus optional webhooks, with `POST /v3/messages/recent` catch-up after disconnects; text replies (voice/TTS stays on the Carbon Voice side).
+
+npm package name (install spec): **`@carbonvoice/openclaw-extension`**. Plugin id in OpenClaw remains **`carbonvoice`** (`openclaw.plugin.json` / `openclaw.channel.id`).
 
 Docs: `https://docs.openclaw.ai/channels/carbonvoice`  
 Plugin system: `https://docs.openclaw.ai/plugin`
@@ -50,17 +52,54 @@ Example using `/tmp` only:
 node scripts/lib/plugin-npm-package-manifest.mjs --run extensions/carbonvoice -- npm pack --pack-destination /tmp
 ```
 
-That writes `openclaw-carbonvoice-<version>.tgz` with `dist/`, `openclaw.runtimeExtensions`, and `openclaw.runtimeSetupEntry` set for the installer.
+That writes `carbonvoice-openclaw-extension-<version>.tgz` (npm’s filename for scoped packages) with `dist/`, `openclaw.runtimeExtensions`, and `openclaw.runtimeSetupEntry` set for the installer.
 
 On the target host:
 
 ```bash
-openclaw plugins install ./openclaw-carbonvoice-<version>.tgz
+openclaw plugins install ./carbonvoice-openclaw-extension-<version>.tgz
 # or
-openclaw plugins install npm-pack:/tmp/openclaw-carbonvoice-<version>.tgz
+openclaw plugins install npm-pack:/tmp/carbonvoice-openclaw-extension-<version>.tgz
 ```
 
-Publish to npm or ClawHub using the same build step, then run the repo’s plugin release checks (`pnpm release:plugins:npm:check`, `pnpm release:plugins:npm:plan`) and your ClawHub publish flow, consistent with other `publishToNpm` extensions.
+### Publish to npm (`@carbonvoice` org)
+
+This package is scoped to **`@carbonvoice`** on npm (`publishConfig.access: "public"`). It is **not** part of OpenClaw’s automated `@openclaw/*` plugin npm matrix (`openclaw.release.publishToNpm` is `false` here so repo release scripts keep enforcing the `@openclaw` publisher contract).
+
+**One-time npm setup**
+
+1. Create the **`carbonvoice`** organization on [npmjs.com](https://www.npmjs.com/) (if it does not exist) and invite maintainers.
+2. Create a granular **Automation** or **Publish** token with permission to publish that org’s packages (or use `npm login` with a user who is an org member).
+
+**Publish from the OpenClaw repo root** (after `pnpm install`):
+
+```bash
+export NODE_AUTH_TOKEN="npm_..."   # token with publish rights to @carbonvoice
+# Local / non-GitHub-OIDC publishes cannot use npm provenance; disable for this shell:
+export OPENCLAW_NPM_PUBLISH_PROVENANCE=0
+
+bash scripts/plugin-npm-publish.sh --pack-dry-run extensions/carbonvoice
+bash scripts/plugin-npm-publish.sh --publish extensions/carbonvoice
+```
+
+The script runs the runtime build, applies the same `package.json` overlay as `npm pack`, then **`npm publish --access public`**. First publish of a scoped public package must stay **`public`** (already set in `publishConfig`).
+
+**Install for users** (after publish):
+
+```bash
+openclaw plugins install npm:@carbonvoice/openclaw-extension
+openclaw plugins install npm:@carbonvoice/openclaw-extension@2026.3.14
+```
+
+### Publish to ClawHub
+
+ClawHub is optional; use the [ClawHub CLI](https://docs.openclaw.ai/plugins/manage-plugins#publish-to-clawhub) (`clawhub package publish …`) with an owner whose scope matches **`@carbonvoice`**, or publish the tarball produced by `clawhub package pack` after the same `dist/` build as above. See [Publishing on ClawHub](https://docs.openclaw.ai/clawhub/publishing).
+
+**Install spec** (after a ClawHub release exists):
+
+```bash
+openclaw plugins install clawhub:@carbonvoice/openclaw-extension
+```
 
 Peer dependency: `openclaw` must satisfy `peerDependencies.openclaw` in this package’s `package.json`.
 

@@ -2,7 +2,7 @@
 
 This guide is for operators who already have a packaged CarbonVoice plugin tarball, for example:
 
-- `openclaw-carbonvoice-2026.3.14.tgz`
+- `carbonvoice-openclaw-extension-2026.3.14.tgz` (filename npm uses for scoped package `@carbonvoice/openclaw-extension`)
 
 The tarball **must** include compiled `dist/*.js` and the publish manifest overlay (`openclaw.runtimeExtensions` pointing at `./dist/index.js`). If `openclaw plugins install` says the package only ships `.ts` sources, rebuild the archive using the commands in `extensions/carbonvoice/README.md` (“Tarball (npm / ClawHub)”) from an OpenClaw source checkout.
 
@@ -20,10 +20,16 @@ No OpenClaw source checkout is required **on the install host** if you were give
 From the directory that contains the `.tgz` file:
 
 ```bash
-openclaw plugins install ./openclaw-carbonvoice-<version>.tgz
+openclaw plugins install ./carbonvoice-openclaw-extension-<version>.tgz
 ```
 
-Use the exact filename you received.
+After the package is published to npm, you can install by spec instead:
+
+```bash
+openclaw plugins install npm:@carbonvoice/openclaw-extension
+```
+
+Use the exact tarball filename when installing from a file.
 
 ## 2) Enable the plugin
 

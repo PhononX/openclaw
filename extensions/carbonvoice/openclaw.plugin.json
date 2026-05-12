@@ -7,6 +7,43 @@
   "channelEnvVars": {
     "carbonvoice": ["AGENT_PAT"]
   },
+  "channelConfigs": {
+    "carbonvoice": {
+      "label": "Carbon Voice",
+      "description": "Carbon Voice PAT websocket and optional webhooks; text replies (voice/TTS on the Carbon Voice side).",
+      "schema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "enabled": { "type": "boolean" },
+          "name": { "type": "string" },
+          "apiKey": { "type": "string" },
+          "apiKeyFile": { "type": "string" },
+          "creatorId": { "type": "string" },
+          "baseUrl": { "type": "string" },
+          "publicWebhookBaseUrl": { "type": "string" },
+          "webhookPath": { "type": "string" },
+          "accounts": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "enabled": { "type": "boolean" },
+                "name": { "type": "string" },
+                "apiKey": { "type": "string" },
+                "apiKeyFile": { "type": "string" },
+                "creatorId": { "type": "string" },
+                "baseUrl": { "type": "string" },
+                "publicWebhookBaseUrl": { "type": "string" },
+                "webhookPath": { "type": "string" }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
   "configSchema": {
     "type": "object",
     "additionalProperties": false,
